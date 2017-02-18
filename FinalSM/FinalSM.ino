@@ -25,30 +25,30 @@ typedef enum Result_t{
   failure, success
 }Result_t;
 
-static double maxAngle;
 static int vibPin = 9; //Pin for vibration motor
+static int initAngle; //Will be initialized after user sets workout
 
 /* Assign a unique ID to this sensor at the same time */
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 
 /*Turn on vibration motor*/
-static void buzzOn(void){
+void buzzOn(void){
   digitalWrite(vibPin,HIGH);
 }
 
 /*Turn off vibration motor*/
-static void buzzOff(void){
+void buzzOff(void){
   digitalWrite(vibPin,LOW);
 }
 
 /*Returns current angle of leg*/
-static float getAngle(sensors_event_t* event){
+float getAngle(sensors_event_t* event){
    float accx = (event->acceleration).x;
   float accy = (event->acceleration).y;
   return atan(accx/accy)*RADIAN_CONST;
 }
 
-static void printAccelerations(){
+void printAccelerations(){
   sensors_event_t event;
   accel.getEvent(&event);
 
@@ -56,6 +56,13 @@ static void printAccelerations(){
   Serial.print("X: "); Serial.print(event.acceleration.x); Serial.print("  ");
   Serial.print("Y: "); Serial.print(event.acceleration.y); Serial.print("  ");
   Serial.print("Z: "); Serial.print(event.acceleration.z); Serial.print("  ");Serial.println("m/s^2 ");
+}
+
+/*checks if Z angle is out of bounds*/
+bool isZOutOBounds(float accz){
+  if ((accz < ZTHRESH_LOW) || (accz > ZTHRESH_HIGH))
+    return true;
+  return false; 
 }
 
 
@@ -71,24 +78,21 @@ void setup() {
   }
 }
 
+
 //Checks if angles are all within defined thresholds
 //while monitoring. Also sets the maximum angle reached 
 //by the leg
-static bool isCorrectConfig(){
-  sensors_event_t event;
-  accel.getEvent(&event);
+bool isCorrectConfig(float currAngle, float accz){
   
-  float accz = event.acceleration.z;
-  if (isZOutOfBounds(accz)){
-    #ifdef DEBUG
-      Serial.println("Z is out of bounds!");
-    #endif
+  if (isZOutOBounds(accz)){
     return false; //Bad Z value
   }
-    
-  float currAngle = getAngle(&event);
-  Serial.print("Current angle: ");
-  Serial.println(currAngle);
+
+  #ifdef DEBUG
+    Serial.print("Current angle: ");
+    Serial.println(currAngle);
+  #endif
+  
   float err = currAngle - INITIAL_CONFIG_OFFSET;
   if (err < ANGLE_ERROR && err > -ANGLE_ERROR){
     return true;
@@ -96,62 +100,73 @@ static bool isCorrectConfig(){
   return false;
 }
 
-/*checks if Z angle is out of bounds*/
-static bool isZOutOfBounds(float accz){
-  if ((accz < ZTHRESH_LOW) || (accz > ZTHRESH_HIGH))
-    return true;
-  return false; 
-}
-
 /*Sends cycle result to the app*/
-static void sendToApp(Result_t res){
+void sendToApp(Result_t res){
 }
 
 void loop() {
-  switch(mystate){
-    
+  //Get accelerometer data
+  sensors_event_t event;
+  accel.getEvent(&event);
+  float currAngle = getAngle(&event);
+  float accz = event.acceleration.z;
+  
+  switch(mystate){  
     case WaitingToPair:
-      //If paired, move
+    { //If paired, move
       buzzOn();
       mystate = WaitingForInitialConfig;
-      break;
+    }
+    break;
       
     case WaitingForSelection:
       break;
 
     case WaitingForInitialConfig:
+    {
       #ifdef DEBUG
         //printAccelerations();
       #endif
-      if (isCorrectConfig()){
+      if (isCorrectConfig(currAngle,accz)){
         #ifdef DEBUG
           Serial.println("Correct config reached!");
         #endif
         buzzOff();
-        //mystate = WaitingForUserStart;
+        initAngle = currAngle;
+        mystate = WaitingForUserStart;
       }
-      break;
+    }
+    break;
       
     case WaitingForUserStart:
-      break;
-
+    {
+      float err = initAngle - START_ANGLE_THRESH;
+      if ((err < -1*START_ANGLE_THRESH) || (err > START_ANGLE_THRESH) ){
+        //user has started to move, monitor
+        mystate = MonitoringCycle;
+      }
+    }     
+    break;
+  
     case MonitoringCycle:
-      /* Get a new sensor event */
-      sensors_event_t event;
-      accel.getEvent(&event);
-      float currAngle = getAngle(&event);
-      float accz = event.acceleration.z;
-       
-      if (isZOutOfBounds(accz)|| currAngle > MAX_CONTRACTION){
+    {
+      if ((isZOutOBounds(accz))|| (currAngle > MAX_CONTRACTION)){
         //Switch back to waiting, start buzzing
-        mystate = WaitingForUserStart;
+        mystate = WaitingForInitialConfig;
         buzzOn();
         sendToApp(failure);
+        #ifdef DEBUG
+          Serial.println("Wrong move!Go back to start!");
+        #endif
       }else if(currAngle < START_ANGLE_THRESH){
         //back to initial state
         mystate = WaitingForUserStart;
         sendToApp(success);
+        #ifdef DEBUG
+          Serial.println("Successful workout!");
+        #endif
       }
-      break;
+    }
+    break;
   }
 }
