@@ -59,6 +59,7 @@
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
     #define MODE_LED_BEHAVIOUR          "MODE"
     #define ENABLE_SERIAL_MONITOR       1
+    #define VIBE_PIN                    9
 /*=========================================================================*/
 
 // Create the bluefruit object, either software serial...uncomment these lines
@@ -136,8 +137,10 @@ void setup(void)
   ble.verbose(false);  // debug info is a little annoying after this point!
 
   run_initializers();
-
-  Serial.println(F("INITIALIZERS DO NOT WORK"));
+  pinMode(VIBE_PIN, OUTPUT);
+  digitalWrite(VIBE_PIN, HIGH);
+  delay(1000);
+  digitalWrite(VIBE_PIN, LOW);
 
   /* Wait for connection */
   while (! ble.isConnected()) {
