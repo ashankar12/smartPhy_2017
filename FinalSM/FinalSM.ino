@@ -1,16 +1,17 @@
 #include <Arduino.h>
+#include <neopixel.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_LSM303_U.h>
 
 #define DEBUG
 
-#define ZTHRESH_LOW -4
-#define ZTHRESH_HIGH 4
+#define ZTHRESH_LOW -3
+#define ZTHRESH_HIGH 3
 #define RADIAN_CONST 57.29
 #define ANGLE_ERROR 10
-#define INITIAL_CONFIG_OFFSET  63.1  
-#define FINAL_CONFIG_OFFSET 0// 90 degrees=> 0 deg X, 10 deg Y and 0.5 deg Z
+#define INITIAL_CONFIG_OFFSET  26.56 //4.5 x and 9 y 
+#define FINAL_CONFIG_OFFSET 160.8// 
 #define INITITAL_ANGLE_THRESH 4 //4 degrees from initial angle
 #define START_ANGLE_THRESH 5 //5 Degrees movement detection for movement
 #define MAX_CONTRACTION 90 //cannot do more than 90 degrees
@@ -32,23 +33,34 @@ static int initAngle; //Will be initialized after user sets workout
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 
 /*Turn on vibration motor*/
-void buzzOn(void){
+static void buzzOn(void){
   digitalWrite(vibPin,HIGH);
 }
 
 /*Turn off vibration motor*/
-void buzzOff(void){
+static void buzzOff(void){
   digitalWrite(vibPin,LOW);
 }
 
-/*Returns current angle of leg*/
-float getAngle(sensors_event_t* event){
-   float accx = (event->acceleration).x;
-  float accy = (event->acceleration).y;
-  return atan(accx/accy)*RADIAN_CONST;
+/*Indicate color to user*/
+static void turnOnLED(char* color){
+  colorWipeWrapper(color);
 }
 
-void printAccelerations(){
+/*Returns current angle of leg*/
+static float getAngle(sensors_event_t* event){
+   float accx = (event->acceleration).x;
+  float accy = (event->acceleration).y;
+  float res = atan(accx/accy);
+  //if (res < 0){
+   // res = 180 - RADIAN_CONST*res;
+  //}else{
+  //  res = RADIAN_CONST*res;
+  //}
+  return res*RADIAN_CONST;
+}
+
+static void printAccelerations(){
   sensors_event_t event;
   accel.getEvent(&event);
 
@@ -59,16 +71,42 @@ void printAccelerations(){
 }
 
 /*checks if Z angle is out of bounds*/
-bool isZOutOBounds(float accz){
-  if ((accz < ZTHRESH_LOW) || (accz > ZTHRESH_HIGH))
+static bool isZOutOBounds(float accz){
+  if ((accz < ZTHRESH_LOW) || (accz > ZTHRESH_HIGH)){
     return true;
+  }
   return false; 
+}
+
+//Checks if angles are all within defined thresholds
+//while monitoring. Also sets the maximum angle reached 
+//by the leg
+static bool isCorrectConfig(float currAngle, float accz){
+  
+  if (isZOutOBounds(accz)){
+    return false; //Bad Z value
+  }
+
+  
+  
+  float err = currAngle - INITIAL_CONFIG_OFFSET;
+  //Serial.println(err);
+  if (err < ANGLE_ERROR && err > -ANGLE_ERROR){
+    return true;
+  }
+
+  return false;
+}
+
+/*Sends cycle result to the app*/
+static void sendToApp(Result_t res){
 }
 
 
 void setup() {
   Serial.begin(9600);
   pinMode(vibPin,OUTPUT);
+  neopixel_init();
   buzzOff();
   mystate = WaitingToPair;
   /* Initialise the sensor */
@@ -78,44 +116,24 @@ void setup() {
   }
 }
 
-
-//Checks if angles are all within defined thresholds
-//while monitoring. Also sets the maximum angle reached 
-//by the leg
-bool isCorrectConfig(float currAngle, float accz){
-  
-  if (isZOutOBounds(accz)){
-    return false; //Bad Z value
-  }
-
-  #ifdef DEBUG
-    Serial.print("Current angle: ");
-    Serial.println(currAngle);
-  #endif
-  
-  float err = currAngle - INITIAL_CONFIG_OFFSET;
-  if (err < ANGLE_ERROR && err > -ANGLE_ERROR){
-    return true;
-  }
-  return false;
-}
-
-/*Sends cycle result to the app*/
-void sendToApp(Result_t res){
-}
-
 void loop() {
   //Get accelerometer data
   sensors_event_t event;
   accel.getEvent(&event);
   float currAngle = getAngle(&event);
   float accz = event.acceleration.z;
+
+  #ifdef DEBUG
+    //Serial.print("Current angle: ");
+    //Serial.println(currAngle);
+  #endif
   
   switch(mystate){  
     case WaitingToPair:
     { //If paired, move
       buzzOn();
       mystate = WaitingForInitialConfig;
+      turnOnLED("RED");
     }
     break;
       
@@ -132,6 +150,7 @@ void loop() {
           Serial.println("Correct config reached!");
         #endif
         buzzOff();
+        turnOnLED("BLUE");
         initAngle = currAngle;
         mystate = WaitingForUserStart;
       }
@@ -140,9 +159,14 @@ void loop() {
       
     case WaitingForUserStart:
     {
-      float err = initAngle - START_ANGLE_THRESH;
-      if ((err < -1*START_ANGLE_THRESH) || (err > START_ANGLE_THRESH) ){
+      float err = currAngle - initAngle;
+      if (err < -START_ANGLE_THRESH) {
         //user has started to move, monitor
+
+        #ifdef DEBUG
+          Serial.println("user has started");
+        #endif
+        turnOnLED("GREEN");
         mystate = MonitoringCycle;
       }
     }     
@@ -155,13 +179,16 @@ void loop() {
         mystate = WaitingForInitialConfig;
         buzzOn();
         sendToApp(failure);
+        rainbowCycle();
+        delay(500);
         #ifdef DEBUG
           Serial.println("Wrong move!Go back to start!");
         #endif
-      }else if(currAngle < START_ANGLE_THRESH){
+      }else if(currAngle > initAngle){
         //back to initial state
         mystate = WaitingForUserStart;
         sendToApp(success);
+        turnOnLED("BLUE");
         #ifdef DEBUG
           Serial.println("Successful workout!");
         #endif
@@ -169,4 +196,5 @@ void loop() {
     }
     break;
   }
+  delay(500);
 }
