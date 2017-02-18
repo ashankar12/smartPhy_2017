@@ -26,7 +26,7 @@
                    Public Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/ 
 
-bool read_bt_message (Adafruit_BluefruitLE_UART::Adafruit_BluefruitLE_UART ble)
+bool read_bt_message (Adafruit_BluefruitLE_UART ble)
 {
   // Check for incoming characters from Bluefruit
   #if ENABLE_BT_DEBUG
