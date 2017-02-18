@@ -1,3 +1,16 @@
+/*********************************************************************
+ This is an example for our nRF51822 based Bluefruit LE modules
+
+ Pick one up today in the adafruit shop!
+
+ Adafruit invests time and resources providing this open source code,
+ please support Adafruit and open-source hardware by purchasing
+ products from Adafruit!
+
+ MIT license, check LICENSE for more information
+ All text above, and the splash screen below must be included in
+ any redistribution
+*********************************************************************/
 #include <Arduino.h>
 #include <SPI.h>
 #if not defined (_VARIANT_ARDUINO_DUE_X_) && not defined (_VARIANT_ARDUINO_ZERO_)
@@ -9,7 +22,7 @@
 #include "Adafruit_BluefruitLE_UART.h"
 
 #include "BluefruitConfig.h"
-#include "bt_comm_helpers.h"
+#include "ES_Config.h"
 
 /*=========================================================================
     APPLICATION SETTINGS
@@ -45,8 +58,8 @@
     #define FACTORYRESET_ENABLE         1
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
     #define MODE_LED_BEHAVIOUR          "MODE"
-    // Set to 0 when not running with Serial Monitor
-    #define ENABLE_DEBUG_MODE           1
+    #define ENABLE_SERIAL_MONITOR       1
+    #define VIBE_PIN                    9
 /*=========================================================================*/
 
 // Create the bluefruit object, either software serial...uncomment these lines
@@ -83,11 +96,10 @@ void error(const __FlashStringHelper*err) {
 /**************************************************************************/
 void setup(void)
 {
-  // Preventing debugging from hanging up code
-  #if ENABLE_DEBUG_MODE
+  #if ENABLE_SERIAL_MONITOR
     while (!Serial);  // required for Flora & Micro
-    delay(500);
   #endif
+  delay(500);
 
   Serial.begin(115200);
   Serial.println(F("Adafruit Bluefruit Command Mode Example"));
@@ -124,6 +136,12 @@ void setup(void)
 
   ble.verbose(false);  // debug info is a little annoying after this point!
 
+  run_initializers();
+  pinMode(VIBE_PIN, OUTPUT);
+  digitalWrite(VIBE_PIN, HIGH);
+  delay(1000);
+  digitalWrite(VIBE_PIN, LOW);
+
   /* Wait for connection */
   while (! ble.isConnected()) {
       delay(500);
@@ -147,6 +165,9 @@ void setup(void)
 /**************************************************************************/
 void loop(void)
 {
+  
+  bool status = is_event_pending();  
+  
   // Check for user input
   char inputs[BUFSIZE+1];
 
@@ -165,7 +186,16 @@ void loop(void)
     }
   }
 
-  read_bt_message(ble);
+  // Check for incoming characters from Bluefruit
+  ble.println("AT+BLEUARTRX");
+  ble.readline();
+  if (strcmp(ble.buffer, "OK") == 0) {
+    // no data
+    return;
+  }
+  // Some data was found, its in the buffer
+  Serial.print(F("[Recv] ")); Serial.println(ble.buffer);
+  ble.waitForOK();
 }
 
 /**************************************************************************/
