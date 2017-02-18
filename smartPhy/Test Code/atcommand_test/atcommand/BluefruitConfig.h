@@ -26,7 +26,7 @@
 // Looks like Serial1 is not defined, preventing the define to not be compiled
 //#ifdef Serial1    // this makes it not complain on compilation if there's no Serial1
   
-  #define BLUEFRUIT_HWSERIAL_NAME      Serial1
+#define BLUEFRUIT_HWSERIAL_NAME      Serial1
 
 //#endif
 

@@ -2,7 +2,7 @@
 // ----------------------------------------------------------------------------------------------
 // These settings are used in both SW UART, HW UART and SPI mode
 // ----------------------------------------------------------------------------------------------
-#define BUFSIZE                        160   // Size of the read buffer for incoming data
+#define BUFSIZE                        128   // Size of the read buffer for incoming data
 #define VERBOSE_MODE                   true  // If set to 'true' enables debug output
 
 
@@ -22,12 +22,8 @@
 // The following macros declare the HW serial port you are using. Uncomment
 // this line if you are connecting the BLE to Leonardo/Micro or Flora
 // ----------------------------------------------------------------------------------------------
-
-// Looks like Serial1 is not defined, preventing the define to not be compiled
 //#ifdef Serial1    // this makes it not complain on compilation if there's no Serial1
-  
-  #define BLUEFRUIT_HWSERIAL_NAME      Serial1
-
+#define BLUEFRUIT_HWSERIAL_NAME      Serial1
 //#endif
 
 
