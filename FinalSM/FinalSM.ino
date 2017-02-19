@@ -12,7 +12,7 @@
 #endif
 
 //#define DEBUG
-#define DEBUG_BLUETOOTH
+//#define DEBUG_BLUETOOTH
 //#define DEBUG_ANGLE
 
 #define ZTHRESH_LOW -3
@@ -26,7 +26,6 @@
 #define START_ANGLE_THRESH 5 //5 Degrees movement detection for movement
 #define FACTORYRESET_ENABLE 1
 #define END_GOAL_FACTOR 0.9
-#define SEMI_GOAL_FACTOR 0.85
 
 /*States of the system*/
 typedef enum State_t{
@@ -40,19 +39,9 @@ typedef enum limits_t{
   maxLimit, endLimit, semiLimit
 }limits_t;
 
-/*Enumerators defining axes of the 
-  accelerometers. */
-typedef enum axis_t{
-  x,y,z
-}axis_t;
-
-typedef enum axis_type{
-  major,first_minor,second_minor
-}axis_type;
-
 /*Result of a workout*/
 typedef enum Result_t{
-  failure, success
+  failure, success, workComplete
 }Result_t;
 
 /*All static variables*/
@@ -63,6 +52,9 @@ static float numCodeAnglesTillEnd ; //Number of codeAngles till the end
 static int numReps; //Current number of reps remanining for the user
 static int totalReps; //Total Number of reps done so far 
 static bool reachedEnd; //Variable to check if user reached end angle
+char repSuccess[4] = {3,1,0xff};
+char repFailure[4] = {3,2,0xff};
+char workoutComplete[3] = {4,0xff};
 
 /* Assign a unique ID to this sensor at the same time */
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
@@ -127,44 +119,16 @@ static bool isCorrectConfig(float currAngle, float accz){
 
 /*Sends cycle result to the app*/
 static void sendToApp(Result_t res){
-}
-
-/*Parse BLE input and execute*/
-static void parseBLEInput(){
-  if(strcmp(ble.buffer,"OK") == 0){
-    return;
+  char* buf;
+  if (res == success){
+    buf = repSuccess;  
+  }else if (res == failure){
+    buf = repFailure;
+  }else{
+    buf = workoutComplete;
   }
-  int cmd_number = ble.buffer[0];
-  #ifdef DEBUG_BLUETOOTH
-   Serial.print("Command number: ");
-   Serial.println(cmd_number);
-  #endif
-  
-  switch(cmd_number){
-    case 0:
-      {
-        //Profile, read next 
-        startAngle = ble.buffer[1];
-        float endAngle = ble.buffer[2];
-        numCodeAnglesTillEnd = (endAngle - startAngle)*ACTUAL_ANGLE_TO_CODE_ANGLE;
-        numReps = ble.buffer[3];
-      }
-      break;
-    case 1:
-      {
-        //Start workout, change state
-        mystate = WaitingForInitialConfig;
-      }
-      break;
-    case 2:
-      {
-        //Stop workout,change state, wait for user selection
-        mystate = WaitingForSelection;
-      }
-      break;
-    default:
-      break;
-  }
+  ble.print("AT+BLEUARTTX=");
+  ble.println(buf);
 }
 
 /*Yello dance at the end of session*/
@@ -208,6 +172,30 @@ static void successRoutine(void){
   sendToApp(success);
   turnOnLED("BLUE");
   numReps--;
+}
+
+/*Read from BLE receive buffer*/
+static int readBLE(void){
+  ble.println("AT+BLEUARTRX");
+  ble.readline();
+
+  if(strcmp(ble.buffer,"OK") == 0){
+    return -1;
+  }
+  int cmd_number = ble.buffer[0];
+  #ifdef DEBUG_BLUETOOTH
+   Serial.print("Command number: ");
+   Serial.println(cmd_number);
+  #endif
+
+  if (cmd_number == 0){
+    //Profile, read next 
+    startAngle = ble.buffer[1];
+    float endAngle = ble.buffer[2];
+    numCodeAnglesTillEnd = (endAngle - startAngle)*ACTUAL_ANGLE_TO_CODE_ANGLE;
+    numReps = ble.buffer[3];
+  }
+  return cmd_number;
 }
 
 void setup() {
@@ -269,83 +257,97 @@ void loop() {
     case WaitingForSelection:
     {
       // Check for incoming characters from Bluefruit
-       ble.println("AT+BLEUARTRX");
-       ble.readline();
-       parseBLEInput();
+      if (readBLE() == 1){
+        mystate =  WaitingForInitialConfig;
+      }
     }
     break;
 
     case WaitingForInitialConfig:
     {
-      #ifdef DEBUG
-        //printAccelerations();
-      #endif
-      if (isCorrectConfig(currAngle,accz)){
-        #ifdef DEBUG_BLUETOOTH
-          Serial.println("Correct config reached!");
-        #endif
-        buzzOff();
-        turnOnLED("BLUE");
-        initAngle = currAngle;
-        mystate = WaitingForUserStart;
+      if(readBLE() == 2){
+        //User has cancelled workout
+        mystate = WaitingForSelection;
+      }else{
+        
+        if (isCorrectConfig(currAngle,accz)){
+          #ifdef DEBUG_BLUETOOTH
+            Serial.println("Correct config reached!");
+          #endif
+          buzzOff();
+          turnOnLED("BLUE");
+          initAngle = currAngle;
+          mystate = WaitingForUserStart;
+        }
       }
     }
     break;
       
     case WaitingForUserStart:
     {
-      float err = currAngle - initAngle;
-      if (err < -START_ANGLE_THRESH) {
-        #ifdef DEBUG
-          Serial.println("user has started");
-        #endif
-        turnOnLED("GREEN");
-        totalReps = 0;
-        reachedEnd = false;
-        mystate = MonitoringCycle;
+      if(readBLE() == 2){
+        //User has cancelled workout
+        mystate = WaitingForSelection;
+        buzzOn();
+        turnOnLED("RED");
+      }else{
+        float err = currAngle - initAngle;
+        if (err < -START_ANGLE_THRESH) {
+          #ifdef DEBUG
+            Serial.println("user has started");
+          #endif
+          turnOnLED("GREEN");
+          totalReps = 0;
+          reachedEnd = false;
+          mystate = MonitoringCycle;
+        }
       }
     }     
     break;
   
     case MonitoringCycle:
     {
-      if ((isZOutOBounds(accz))|| isLimitReached(currAngle,maxLimit)){
+      if(readBLE() == 2){
+        //User has cancelled workout
+        mystate = WaitingForSelection;
+        numCodeAnglesTillEnd = 0;
+        buzzOn();
+        turnOnLED("RED");
+      }else if ((isZOutOBounds(accz))|| isLimitReached(currAngle,maxLimit)){
         failRoutine();
-        #ifdef DEBUG
+        #ifdef DEBUG_BLUETOOTH
           Serial.println("Wrong move!Go back to start!");
         #endif        
-        totalReps++;
       }else if(currAngle > initAngle){
         if(reachedEnd){ 
           successRoutine();
-          #ifdef DEBUG
+          #ifdef DEBUG_BLUETOOTH
             Serial.println("Successful workout!");
           #endif
           reachedEnd = false;
+          Serial.print("numReps: ");
+          Serial.println(numReps);
         }else{ //Failure 
           failRoutine();
-          #ifdef DEBUG
+          #ifdef DEBUG_BLUETOOTH
             Serial.println("Didn't reach high bitch");
           #endif
         }
-        totalReps++;
       }else if(isLimitReached(currAngle,endLimit)){
         reachedEnd = true;
         turnOnLED("PURPLE");
-        totalReps++;
       }
       
       if (numReps == 0){
         //Completed workout, perform victory dance
         mystate = VictoryDance;
-        //Send total number of reps to App
+        sendToApp(workComplete);
       }
     }
     break;
 
     case VictoryDance:
     {
-      totalReps = 0;
       numCodeAnglesTillEnd = 0;
       dancePlease();
       mystate = WaitingForSelection;
