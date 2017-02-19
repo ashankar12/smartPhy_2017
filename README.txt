@@ -5,7 +5,7 @@ We use wearable technology to offer high quality affordable solutions for post-o
 
 GitHub repo: https://github.com/ashankar12/smartPhy_2017
 
-This is the source code for smartPhy's TreeHacks 2017 project. The arduino project can be opened by seleting the file smartPhy_2017/FinalSM/FinalSM.ino
+This is the source code for smartPhy's TreeHacks 2017 project. The arduino project can be opened by selecting the file smartPhy_2017/FinalSM/FinalSM.ino
 
 Contributors:
 
