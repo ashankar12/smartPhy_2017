@@ -24,9 +24,9 @@
 #define ACTUAL_ANGLE_TO_CODE_ANGLE 0.61
 #define INITITAL_ANGLE_THRESH 1 
 #define START_ANGLE_THRESH 5 //5 Degrees movement detection for movement
-#define MAX_CONTRACTION 90 //cannot do more than 90 degrees
-#define BUFFER_SIZE 5
 #define FACTORYRESET_ENABLE 1
+#define END_GOAL_FACTOR 0.9
+#define SEMI_GOAL_FACTOR 0.85
 
 /*States of the system*/
 typedef enum State_t{
@@ -34,6 +34,11 @@ typedef enum State_t{
   MonitoringCycle, VictoryDance
 }State_t;
 State_t mystate;
+
+/*End states of a workout*/
+typedef enum limits_t{
+  maxLimit, endLimit, semiLimit
+}limits_t;
 
 /*Enumerators defining axes of the 
   accelerometers. */
@@ -57,6 +62,7 @@ static int startAngle; //Start angle set by workout
 static float numCodeAnglesTillEnd ; //Number of codeAngles till the end
 static int numReps; //Current number of reps remanining for the user
 static int totalReps; //Total Number of reps done so far 
+static bool reachedEnd; //Variable to check if user reached end angle
 
 /* Assign a unique ID to this sensor at the same time */
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
@@ -173,14 +179,36 @@ static void dancePlease(void){
 
 /*Returns true if angle limit has
   been reached*/
-static bool isLimitReached(float currAngle){
+static bool isLimitReached(float currAngle, limits_t limit){
   float diff = initAngle - currAngle;
-  if (diff > numCodeAnglesTillEnd){
+  float limitAngles = limit == maxLimit ? numCodeAnglesTillEnd : END_GOAL_FACTOR*numCodeAnglesTillEnd;
+  
+  if (diff > limitAngles){
     return true;
   }
   return false;
 }
 
+/*Routine for failure after
+  one workout/in-between workout*/
+static void failRoutine(void){
+  //Switch back to waiting, start buzzing
+  mystate = WaitingForInitialConfig;
+  buzzOn();    
+  sendToApp(failure);
+  turnOnLED("RED");
+}
+
+/*Routine for success after
+  one workout*/
+static void successRoutine(void){
+  //back to initial state
+  mystate = WaitingForUserStart;
+  
+  sendToApp(success);
+  turnOnLED("BLUE");
+  numReps--;
+}
 
 void setup() {
   Serial.begin(9600);
@@ -249,10 +277,6 @@ void loop() {
 
     case WaitingForInitialConfig:
     {
-      /*#ifdef DEBUG_BLUETOOTH
-        Serial.println("Reached wait config state!");
-      #endif*/
-      
       #ifdef DEBUG
         //printAccelerations();
       #endif
@@ -277,6 +301,7 @@ void loop() {
         #endif
         turnOnLED("GREEN");
         totalReps = 0;
+        reachedEnd = false;
         mystate = MonitoringCycle;
       }
     }     
@@ -284,26 +309,32 @@ void loop() {
   
     case MonitoringCycle:
     {
-      if ((isZOutOBounds(accz))|| isLimitReached(currAngle)){
-        //Switch back to waiting, start buzzing
-        mystate = WaitingForInitialConfig;
-        buzzOn();    
-        sendToApp(failure);
-        turnOnLED("RED");
+      if ((isZOutOBounds(accz))|| isLimitReached(currAngle,maxLimit)){
+        failRoutine();
         #ifdef DEBUG
           Serial.println("Wrong move!Go back to start!");
-        #endif
+        #endif        
+        totalReps++;
       }else if(currAngle > initAngle){
-        //back to initial state
-        mystate = WaitingForUserStart;
-        sendToApp(success);
-        turnOnLED("BLUE");
-        #ifdef DEBUG
-          Serial.println("Successful workout!");
-        #endif
-        numReps--;
+        if(reachedEnd){ 
+          successRoutine();
+          #ifdef DEBUG
+            Serial.println("Successful workout!");
+          #endif
+          reachedEnd = false;
+        }else{ //Failure 
+          failRoutine();
+          #ifdef DEBUG
+            Serial.println("Didn't reach high bitch");
+          #endif
+        }
+        totalReps++;
+      }else if(isLimitReached(currAngle,endLimit)){
+        reachedEnd = true;
+        turnOnLED("PURPLE");
+        totalReps++;
       }
-      totalReps++;
+      
       if (numReps == 0){
         //Completed workout, perform victory dance
         mystate = VictoryDance;
