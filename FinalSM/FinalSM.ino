@@ -12,13 +12,13 @@
 #endif
 
 //#define DEBUG
-//#define DEBUG_BLUETOOTH
-#define DEBUG_ANGLE
+#define DEBUG_BLUETOOTH
+//#define DEBUG_ANGLE
 
 #define ZTHRESH_LOW -3
 #define ZTHRESH_HIGH 3
 #define RADIAN_CONST 57.29
-#define ANGLE_ERROR 10
+#define ANGLE_ERROR 5
 #define INITIAL_CONFIG_OFFSET  27
 #define FINAL_CONFIG_OFFSET -27
 #define ACTUAL_ANGLE_TO_CODE_ANGLE 0.61
@@ -110,8 +110,9 @@ static bool isCorrectConfig(float currAngle, float accz){
   if (isZOutOBounds(accz)){
     return false; //Bad Z value
   }
-  
-  float err = currAngle - INITIAL_CONFIG_OFFSET - startAngle;
+
+  float finalAngle = INITIAL_CONFIG_OFFSET - (startAngle) * ACTUAL_ANGLE_TO_CODE_ANGLE;
+  float err = currAngle - finalAngle;
   if (err < ANGLE_ERROR && err > -ANGLE_ERROR){
     return true;
   }
@@ -248,11 +249,15 @@ void loop() {
 
     case WaitingForInitialConfig:
     {
+      /*#ifdef DEBUG_BLUETOOTH
+        Serial.println("Reached wait config state!");
+      #endif*/
+      
       #ifdef DEBUG
         //printAccelerations();
       #endif
       if (isCorrectConfig(currAngle,accz)){
-        #ifdef DEBUG
+        #ifdef DEBUG_BLUETOOTH
           Serial.println("Correct config reached!");
         #endif
         buzzOff();
