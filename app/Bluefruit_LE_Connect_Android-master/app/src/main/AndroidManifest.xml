@@ -176,6 +176,9 @@
                 android:value="com.adafruit.bluefruit.le.connect.app.neopixel.NeopixelActivity" />
         </activity>
 
+
+        <activity android:name="com.adafruit.bluefruit.le.connect.app.IntroActivity"
+            android:label="app_intro" />
     </application>
 
 </manifest>

@@ -30,6 +30,7 @@ repositories {
     maven {
         url "https://repo.eclipse.org/content/repositories/paho-releases/"
     }
+    mavenCentral()
 }
 
 dependencies {
@@ -45,4 +46,5 @@ dependencies {
     compile 'com.google.android.gms:play-services-analytics:10.0.1'
     compile 'com.google.android.gms:play-services-location:10.0.1'
     compile 'com.google.android.gms:play-services-vision:10.0.1'
+    compile 'com.github.paolorotolo:appintro:4.1.0'
 }
