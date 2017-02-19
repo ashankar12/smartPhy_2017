@@ -177,8 +177,7 @@
         </activity>
 
 
-        <activity android:name="com.adafruit.bluefruit.le.connect.app.IntroActivity"
-            android:label="app_intro" />
+        <activity android:name=".app.IntroActivity"/>
     </application>
 
 </manifest>

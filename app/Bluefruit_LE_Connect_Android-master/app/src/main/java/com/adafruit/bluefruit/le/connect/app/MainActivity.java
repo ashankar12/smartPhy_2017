@@ -144,6 +144,10 @@ public class MainActivity extends AppCompatActivity implements BleManager.BleMan
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+//        //App Intro will load everytime
+//        Intent intent = new Intent(this, IntroActivity.class);
+//        startActivity(intent);
+
         // Init variables
         mBleManager = BleManager.getInstance(this);
         restoreRetainedDataFragment();
@@ -1911,11 +1915,10 @@ public class MainActivity extends AppCompatActivity implements BleManager.BleMan
         private BluetoothDeviceData mSelectedDeviceData;
         //private PeripheralList mPeripheralList;
 
-        @Override
-        public void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            setRetainInstance(true);
-        }
+//        @Override
+//        public void onCreate(Bundle savedInstanceState) {
+//
+//        }
 
     }
 
