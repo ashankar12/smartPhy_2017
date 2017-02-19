@@ -12,15 +12,17 @@
 #endif
 
 //#define DEBUG
-#define DEBUG_BLUETOOTH
+//#define DEBUG_BLUETOOTH
+#define DEBUG_ANGLE
 
 #define ZTHRESH_LOW -3
 #define ZTHRESH_HIGH 3
 #define RADIAN_CONST 57.29
 #define ANGLE_ERROR 10
-#define INITIAL_CONFIG_OFFSET  26.56
-#define FINAL_CONFIG_OFFSET 160.8
-#define INITITAL_ANGLE_THRESH 4 
+#define INITIAL_CONFIG_OFFSET  27
+#define FINAL_CONFIG_OFFSET -27
+#define ACTUAL_ANGLE_TO_CODE_ANGLE 0.61
+#define INITITAL_ANGLE_THRESH 1 
 #define START_ANGLE_THRESH 5 //5 Degrees movement detection for movement
 #define MAX_CONTRACTION 90 //cannot do more than 90 degrees
 #define BUFFER_SIZE 5
@@ -50,9 +52,9 @@ typedef enum Result_t{
 
 /*All static variables*/
 static int vibPin = 9; //Pin for vibration motor
-static int initAngle; //Will be initialized after user sets workout
+static float initAngle; //Will be initialized after user sets workout
 static int startAngle; //Start angle set by workout
-static int endAngle;  //endAngle also set by workout
+static float numCodeAnglesTillEnd ; //Number of codeAngles till the end
 static int numReps; //Current number of reps remanining for the user
 static int totalReps; //Total Number of reps done so far 
 
@@ -136,7 +138,8 @@ static void parseBLEInput(){
       {
         //Profile, read next 
         startAngle = ble.buffer[1];
-        endAngle = FINAL_CONFIG_OFFSET - (90 - ble.buffer[2]);
+        float endAngle = ble.buffer[2];
+        numCodeAnglesTillEnd = (endAngle - startAngle)*ACTUAL_ANGLE_TO_CODE_ANGLE;
         numReps = ble.buffer[3];
       }
       break;
@@ -167,12 +170,24 @@ static void dancePlease(void){
   }
 }
 
+/*Returns true if angle limit has
+  been reached*/
+static bool isLimitReached(float currAngle){
+  float diff = initAngle - currAngle;
+  if (diff > numCodeAnglesTillEnd){
+    return true;
+  }
+  return false;
+}
+
+
 void setup() {
   Serial.begin(9600);
   pinMode(vibPin,OUTPUT);
   neopixel_init();
   buzzOff();
   mystate = WaitingToPair;
+  
   /* Initialise the sensor */
   if(!accel.begin()){
     Serial.println("Accelerometer not found!\n");
@@ -202,7 +217,11 @@ void loop() {
 
   #ifdef DEBUG_ANGLE
     Serial.print("Current angle: ");
-    Serial.println(currAngle);
+    Serial.print(currAngle);
+    Serial.print("Init angle: ");
+    Serial.print(initAngle);
+    Serial.print(", Num Code angles to reach: ");
+    Serial.println(numCodeAnglesTillEnd);
   #endif
   
   switch(mystate){  
@@ -260,13 +279,12 @@ void loop() {
   
     case MonitoringCycle:
     {
-      if ((isZOutOBounds(accz))|| (currAngle > endAngle)){
+      if ((isZOutOBounds(accz))|| isLimitReached(currAngle)){
         //Switch back to waiting, start buzzing
         mystate = WaitingForInitialConfig;
-        buzzOn();
+        buzzOn();    
         sendToApp(failure);
-        //rainbowCycle();
-        delay(500);
+        turnOnLED("RED");
         #ifdef DEBUG
           Serial.println("Wrong move!Go back to start!");
         #endif
@@ -292,9 +310,11 @@ void loop() {
     case VictoryDance:
     {
       totalReps = 0;
+      numCodeAnglesTillEnd = 0;
       dancePlease();
       mystate = WaitingForSelection;
       turnOnLED("RED");
+      buzzOn();
     }
     break;
   }
