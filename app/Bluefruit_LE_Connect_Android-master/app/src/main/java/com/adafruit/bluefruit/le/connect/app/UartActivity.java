@@ -254,7 +254,7 @@ public class UartActivity extends UartInterfaceActivity implements MqttManager.M
         uartSendData(b, false);
 
         VideoView video = (VideoView) findViewById(R.id.videoView);
-        String path = "android.resource://" + getPackageName() + "/" + R.raw.videoOne;
+        String path = "android.resource://" + getPackageName() + "/" + R.raw.videoone;
         video.setVideoURI(Uri.parse(path));
         video.start();
     }
